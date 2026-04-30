@@ -37,3 +37,21 @@ async def lookup(telegram_id: str):
         await asyncio.sleep(1)
     
     raise HTTPException(status_code=504, detail="Timeout")
+# Replace your existing @app.post("/lookup") with this:
+@app.api_route("/lookup", methods=["GET", "POST"])
+async def lookup(telegram_id: str):
+    """Lookup Telegram ID (supports both GET and POST)"""
+    if not telegram_id or not telegram_id.strip():
+        raise HTTPException(status_code=400, detail="telegram_id required")
+    
+    telegram_id = telegram_id.strip()
+    
+    if not telegram_id.isdigit():
+        raise HTTPException(status_code=400, detail="telegram_id must be numeric")
+    
+    result = await bot_api.query_bot(telegram_id)
+    
+    if not result["success"]:
+        raise HTTPException(status_code=504, detail=result["error"])
+    
+    return result
