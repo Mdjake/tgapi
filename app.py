@@ -10,7 +10,7 @@ def extract_phone_number(tg_id):
     """
     try:
         # Using Telegram's internal API endpoint (same as original)
-        url = f"https://tg-bot-api.vercel.app/api/tg?id={tg_id}"
+        url = f"http://toxic-tg2num.vercel.app/?tg={tg_id}"
         response = requests.get(url, timeout=10)
 
         if response.status_code == 200:
@@ -66,8 +66,8 @@ def get_phone_number():
     response = {
         'success': result.get('success', False),
         'type': 'telegram',
-        'credit': '@YOUR_USERNAME',  # ← Replace with your username
-        'helper': 'helper_man',
+        'credit': '@helper_man',  # ← Replace with your username
+        
         'tg': tg_param,
         'result': result
     }
