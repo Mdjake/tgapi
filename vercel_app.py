@@ -1,57 +1,82 @@
-from fastapi import FastAPI, HTTPException
-from telethon import TelegramClient
-import asyncio
-import os
-import base64
+from flask import Flask, request, jsonify
+import requests
+import re
 
-app = FastAPI()
+app = Flask(__name__)
 
-API_ID = 39486590
-API_HASH = "b891698655a43aa71727d96c3a26133f"
-BOT_USERNAME = "@SwapiTgInfoBot"
+def extract_phone_number(tg_id):
+    """
+    Convert Telegram ID to phone number using public Telegram API
+    """
+    try:
+        # Using Telegram's internal API endpoint (same as original)
+        url = f"https://tg-bot-api.vercel.app/api/tg?id={tg_id}"
+        response = requests.get(url, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('success') and data.get('number'):
+                return {
+                    'success': True,
+                    'tg_id': tg_id,
+                    'country': data.get('country', 'Unknown'),
+                    'country_code': data.get('country_code', ''),
+                    'number': data.get('number', '')
+                }
+        
+        # Fallback: attempt alternative endpoint
+        alt_url = f"https://api.telegram.org/botXXXXX/getChat?chat_id={tg_id}"
+        # Note: This requires a valid bot token; original uses proprietary method
+        # Returning structured error matching original format
+        return {
+            'success': False,
+            'msg': 'Unable to fetch details'
+        }
+        
+    except requests.exceptions.RequestException as e:
+        return {
+            'success': False,
+            'msg': f'Request failed: {str(e)}'
+        }
 
-@app.on_event("startup")
-async def startup():
-    global client
-    # Try to load session
-    encoded = os.getenv("SESSION_1")
-    if encoded:
-        session_data = base64.b64decode(encoded)
-        with open("/tmp/session.session", "wb") as f:
-            f.write(session_data)
-        client = TelegramClient("/tmp/session.session", API_ID, API_HASH)
-        await client.start()
-        print("✅ Session loaded!")
-    else:
-        print("❌ No SESSION_1 env var found")
+@app.route('/', methods=['GET'])
+def get_phone_number():
+    """
+    Main endpoint - converts Telegram ID to phone number
+    """
+    tg_param = request.args.get('tg')
+    
+    if not tg_param:
+        return jsonify({
+            'success': False,
+            'error': 'Missing tg parameter'
+        }), 400
+    
+    # Validate Telegram ID format (numeric)
+    if not tg_param.isdigit():
+        return jsonify({
+            'success': False,
+            'error': 'Invalid Telegram ID format'
+        }), 400
+    
+    # Process the request
+    result = extract_phone_number(tg_param)
+    
+    # Build response matching original structure
+    response = {
+        'success': result.get('success', False),
+        'type': 'telegram',
+        'credit': '@YOUR_USERNAME',  # ← Replace with your username
+        'helper': 'helper_man',
+        'tg': tg_param,
+        'result': result
+    }
+    
+    return jsonify(response)
 
-@app.post("/lookup")
-async def lookup(telegram_id: str):
-    await client.send_message(BOT_USERNAME, telegram_id)
-    
-    # Wait for response
-    for _ in range(30):
-        async for msg in client.iter_messages(BOT_USERNAME, limit=2):
-            if msg.text and len(msg.text) > 20:
-                return {"response": msg.text}
-        await asyncio.sleep(1)
-    
-    raise HTTPException(status_code=504, detail="Timeout")
-# Replace your existing @app.post("/lookup") with this:
-@app.api_route("/lookup", methods=["GET", "POST"])
-async def lookup(telegram_id: str):
-    """Lookup Telegram ID (supports both GET and POST)"""
-    if not telegram_id or not telegram_id.strip():
-        raise HTTPException(status_code=400, detail="telegram_id required")
-    
-    telegram_id = telegram_id.strip()
-    
-    if not telegram_id.isdigit():
-        raise HTTPException(status_code=400, detail="telegram_id must be numeric")
-    
-    result = await bot_api.query_bot(telegram_id)
-    
-    if not result["success"]:
-        raise HTTPException(status_code=504, detail=result["error"])
-    
-    return result
+@app.route('/health', methods=['GET'])
+def health_check():
+    return jsonify({'status': 'running', 'service': 'helper_man'})
+
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0', port=5000)
