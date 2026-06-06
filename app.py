@@ -1,82 +1,46 @@
 from flask import Flask, request, jsonify
 import requests
-import re
+import os
 
 app = Flask(__name__)
 
-def extract_phone_number(tg_id):
-    """
-    Convert Telegram ID to phone number using public Telegram API
-    """
-    try:
-        # Using Telegram's internal API endpoint (same as original)
-        url = f"http://toxic-tg2num.vercel.app/?tg={tg_id}"
-        response = requests.get(url, timeout=10)
+ORIGINAL_API_URL = "http://Api.subhxcosmo.in/api"
+ORIGINAL_API_KEY = os.environ.get("API_KEY", "KRISHRDP2")
 
-        if response.status_code == 200:
-            data = response.json()
-            if data.get('success') and data.get('number'):
-                return {
-                    'success': True,
-                    'tg_id': tg_id,
-                    'country': data.get('country', 'Unknown'),
-                    'country_code': data.get('country_code', ''),
-                    'number': data.get('number', '')
-                }
-
-        # Fallback: attempt alternative endpoint
-        alt_url = f"https://api.telegram.org/botXXXXX/getChat?chat_id={tg_id}"
-        # Note: This requires a valid bot token; original uses proprietary method
-        # Returning structured error matching original format
-        return {
-            'success': False,
-            'msg': 'Unable to fetch details'
-        }
-
-    except requests.exceptions.RequestException as e:
-        return {
-            'success': False,
-            'msg': f'Request failed: {str(e)}'
-        }
-
-@app.route('/', methods=['GET'])
-def get_phone_number():
-    """
-    Main endpoint - converts Telegram ID to phone number
-    """
-    tg_param = request.args.get('tg')
-
-    if not tg_param:
-        return jsonify({
-            'success': False,
-            'error': 'Missing tg parameter'
-        }), 400
-
-    # Validate Telegram ID format (numeric)
-    if not tg_param.isdigit():
-        return jsonify({
-            'success': False,
-            'error': 'Invalid Telegram ID format'
-        }), 400
-
-    # Process the request
-    result = extract_phone_number(tg_param)
-
-    # Build response matching original structure
-    response = {
-        'success': result.get('success', False),
-        'type': 'telegram',
-        'credit': '@helper_man',  # ← Replace with your username
-        
-        'tg': tg_param,
-        'result': result
+@app.route('/api')
+def proxy():
+    # Extract parameters from the incoming request
+    req_type = request.args.get('type')
+    term = request.args.get('term')
+    
+    # Prepare parameters for the original API
+    params = {
+        'key': ORIGINAL_API_KEY,
+        'type': req_type,
+        'term': term
     }
-
-    return jsonify(response)
-
-@app.route('/health', methods=['GET'])
-def health_check():
-    return jsonify({'status': 'running', 'service': 'helper_man'})
+    
+    # Fetch data from the original API
+    try:
+        response = requests.get(ORIGINAL_API_URL, params=params)
+        data = response.json()
+    except Exception as e:
+        return jsonify({"error": "Failed to fetch data", "details": str(e)}), 500
+    
+    # Clone and modify the response data
+    if data.get('success') and 'result' in data:
+        # Keep only country_code and number, then change the credit
+        modified_result = {
+            'country_code': data['result'].get('country_code'),
+            'number': data['result'].get('number')
+        }
+        cloned_data = {
+            "developer": "helper man",
+            "data": modified_result
+        }
+        return jsonify(cloned_data)
+    else:
+        return jsonify({"error": "Invalid response from original API"}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=8080)
